@@ -30,7 +30,7 @@ Une las piezas de un **PKG de PS4 o PS5** en un único archivo, usando el **mani
 10. [Nombre y ubicación del archivo final](#nombre-y-ubicación-del-archivo-final)
 11. [Códigos de salida](#códigos-de-salida)
 12. [Preguntas frecuentes](#preguntas-frecuentes)
-13. [Desarrollo y compilación](#desarrollo-y-compilación)
+13. [Binarios y compilación](#binarios-y-compilación)
 14. [English quick start](#english-quick-start)
 
 ---
@@ -395,32 +395,171 @@ No, salvo que uses `--delete-parts`. En modo normal solo se leen. En `--in-place
 
 ---
 
-## Desarrollo y compilación
+### He lanzado CI y no veo binarios en Releases
 
-El proyecto está en **Rust** y se compila con Cargo. No necesitas instalar Rust en el host: hay un contenedor Docker preparado.
+Es normal si no has empujado un tag. GitHub Actions guarda los binarios como **Artifacts** de cada ejecución:
 
-### Con Docker (recomendado)
+1. Abre `https://github.com/rafmarsan/pkg-merge/actions`.
+2. Entra en la ejecución `build` más reciente.
+3. Abajo verás `pkg-merge-windows-x64.exe`, `pkg-merge-linux-x86_64`, `pkg-merge-linux-arm64`, `pkg-merge-macos-x86_64` y `pkg-merge-macos-arm64`.
+4. Descarga el ZIP y descomprímelo.
+
+Las **Releases** solo se crean al empujar un tag `v*`:
 
 ```bash
-make image      # construye la imagen pkg-merge-dev
-make test       # cargo test dentro del contenedor
-make fmt        # rustfmt
-make clippy     # clippy con -D warnings
-make check      # cargo check
-make release-check
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
-O directamente:
+Los artifacts caducan a los 90 días; las Releases no. En las primeras ejecuciones solo se subió Windows porque el workflow aún no compilaba Linux/macOS; ya está corregido.
+
+---
+
+## Binarios y compilación
+
+### Opción 1: descargar un binario ya compilado
+
+#### Releases (recomendado para usar)
+
+Cada tag `v*` genera una Release con los cinco binarios:
+
+- `pkg-merge-windows-x64.exe`
+- `pkg-merge-linux-x86_64`
+- `pkg-merge-linux-arm64`
+- `pkg-merge-macos-x86_64`
+- `pkg-merge-macos-arm64`
+
+Para crear una Release:
 
 ```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+#### Artifacts de GitHub Actions (para cada push/PR)
+
+Si no hay Release, los binarios de cada ejecución están en **Actions**:
+
+1. Abre `https://github.com/rafmarsan/pkg-merge/actions`.
+2. Entra en la ejecución más reciente de `build`.
+3. Abajo, en **Artifacts**, descarga el que necesites.
+4. Descomprime el ZIP.
+
+Los artifacts caducan a los 90 días; las Releases no.
+
+> En las dos ejecuciones que viste solo aparecía `pkg-merge-windows-x64` porque el workflow solo compilaba Windows. Además, el paso "Publicar en Releases" se saltó porque no había ningún tag `v*`. No estaba roto: el binario estaba en Artifacts.
+
+#### Forzar una ejecución manual
+
+GitHub → Actions → `build` → **Run workflow** → elige `master` (o `main`). Solo funciona cuando el workflow está en la rama por defecto.
+
+### Opción 2: compilar en macOS (nativo)
+
+Requisitos:
+
+- Xcode Command Line Tools: `xcode-select --install`
+- Rust (rustup):
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+Compilar:
+
+```bash
+cargo build --release --locked
+./target/release/pkg-merge --version
+```
+
+El binario queda en `target/release/pkg-merge`.
+
+Atajo:
+
+```bash
+make macos-binary
+# deja dist/pkg-merge-macos-arm64 (o -x86_64)
+```
+
+En Apple Silicon el binario es arm64. Para generar x86_64:
+
+```bash
+rustup target add x86_64-apple-darwin
+cargo build --release --locked --target x86_64-apple-darwin
+```
+
+O usa el artifact `pkg-merge-macos-x86_64` de CI.
+
+### Opción 3: compilar en Linux (nativo)
+
+Requisitos (Debian/Ubuntu):
+
+```bash
+sudo apt update
+sudo apt install -y build-essential pkg-config libssl-dev
+```
+
+Fedora:
+
+```bash
+sudo dnf install -y gcc pkgconf openssl-devel
+```
+
+Rust:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+Compilar:
+
+```bash
+cargo build --release --locked
+./target/release/pkg-merge --version
+```
+
+El binario queda en `target/release/pkg-merge`.
+
+### Opción 4: Docker (sin instalar Rust)
+
+Docker sirve para compilar y probar en Linux sin instalar Rust en el host.
+
+| Comando | Qué hace |
+|---|---|
+| `make help` | Muestra todos los comandos. |
+| `make image` | Construye la imagen `pkg-merge-dev`. La primera vez tarda; luego usa caché. |
+| `make test` | Ejecuta las 25 pruebas dentro del contenedor. |
+| `make check` | Compila sin ejecutar. |
+| `make fmt` | Comprueba el formato. |
+| `make clippy` | Ejecuta el linter. |
+| `make release-check` | Compila en modo release. |
+| `make linux-binary` | Compila y copia el binario Linux a `dist/pkg-merge-linux-<arch>` (`arm64` en Apple Silicon, `x86_64` en Intel). |
+| `make macos-binary` | Compila en el Mac con Rust nativo (no usa Docker). |
+| `make clean-volumes` | Borra las cachés de Docker. |
+| `make clean` | Limpia los artefactos dentro de Docker. |
+
+**Importante:** Docker en macOS ejecuta Linux dentro de una máquina virtual. El binario que produce `make linux-binary` es **para Linux**, no para macOS. Para macOS usa `make macos-binary` o el artifact de CI.
+
+Equivalente manual a `make linux-binary`:
+
+```bash
+docker build -f .devcontainer/Dockerfile -t pkg-merge-dev .
 docker run --rm \
   -v "$PWD":/work \
   -v pkg-merge-cargo:/usr/local/cargo/registry \
   -v pkg-merge-target:/target \
   -e CARGO_TARGET_DIR=/target \
   -w /work pkg-merge-dev \
-  cargo test --all
+  cargo build --release --locked
+docker run --rm \
+  -v "$PWD":/work \
+  -v pkg-merge-target:/target \
+  pkg-merge-dev \
+  cp /target/release/pkg-merge /work/dist/pkg-merge-linux-<arch>
 ```
+
+Sustituye `<arch>` por `arm64` (Apple Silicon / ARM) o `x86_64` (Intel/AMD).
 
 Los artefactos de compilación van al volumen `pkg-merge-target`, no al repositorio. Para limpiar:
 
@@ -474,15 +613,26 @@ Ejecuta `make test` para todas.
 
 ### CI y Releases
 
-- **Linux**: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --locked`.
-- **Windows**: `cargo test --locked`, `cargo build --release --locked`, y `pkg-merge.exe` como artifact.
-- Al crear un tag `v*`, el `.exe` se adjunta automáticamente a la Release.
+El workflow `.github/workflows/build.yml` compila:
+
+- Linux x86_64 y Linux ARM64.
+- macOS x86_64 (`macos-15-intel`).
+- macOS arm64 (`macos-15`).
+- Windows x64.
+
+Cada job sube un artifact. En cada push a `master`/`main`, PR o ejecución manual puedes descargarlos desde Actions. Al empujar un tag `v*`, el job `release` descarga los cinco y crea una Release con todos.
 
 Para publicar una versión:
 
 ```bash
 git tag v0.2.0
 git push origin v0.2.0
+```
+
+> Los ejecutables no están firmados. Windows puede avisar de "editor desconocido". macOS puede pedir confirmación en "Privacidad y seguridad" la primera vez; si hace falta:
+
+```bash
+xattr -d com.apple.quarantine ./pkg-merge-macos-arm64
 ```
 
 ---
