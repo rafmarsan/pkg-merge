@@ -410,17 +410,17 @@ Es normal si no has empujado un tag. GitHub Actions guarda los binarios como **A
 
 1. Abre `https://github.com/rafmarsan/pkg-merge/actions`.
 2. Entra en la ejecución `build` más reciente.
-3. Abajo verás `pkg-merge-windows-x64.exe`, `pkg-merge-linux-x86_64`, `pkg-merge-linux-arm64`, `pkg-merge-macos-x86_64` y `pkg-merge-macos-arm64`.
+3. Abajo verás `pkg-merge-windows-x64.exe`, `pkg-merge-linux-x86_64` y `pkg-merge-linux-arm64`.
 4. Descarga el ZIP y descomprímelo.
 
 Las **Releases** solo se crean al empujar un tag `v*`:
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
-Los artifacts caducan a los 90 días; las Releases no. En las primeras ejecuciones solo se subió Windows porque el workflow aún no compilaba Linux/macOS; ya está corregido.
+Los artifacts caducan a los 90 días; las Releases no. En las primeras ejecuciones solo se subió Windows porque el workflow aún no compilaba Linux; ya está corregido. macOS no se compila en CI: se compila a mano (ver abajo).
 
 ---
 
@@ -430,19 +430,19 @@ Los artifacts caducan a los 90 días; las Releases no. En las primeras ejecucion
 
 #### Releases (recomendado para usar)
 
-Cada tag `v*` genera una Release con los cinco binarios:
+Cada tag `v*` genera una Release con los tres binarios:
 
 - `pkg-merge-windows-x64.exe`
 - `pkg-merge-linux-x86_64`
 - `pkg-merge-linux-arm64`
-- `pkg-merge-macos-x86_64`
-- `pkg-merge-macos-arm64`
+
+macOS no se compila en CI. Si lo necesitas, compílalo a mano con la sección de macOS.
 
 Para crear una Release:
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
 #### Artifacts de GitHub Actions (para cada push/PR)
@@ -464,19 +464,27 @@ GitHub → Actions → `build` → **Run workflow** → elige `master` (o `main`
 
 ### Opción 2: compilar en macOS (nativo)
 
-Requisitos:
+**Qué necesitas instalar (solo dos cosas):**
 
-- Xcode Command Line Tools: `xcode-select --install`
-- Rust (rustup):
+1. **Xcode Command Line Tools** (incluye el compilador y el SDK de macOS):
+
+   ```bash
+   xcode-select --install
+   ```
+
+2. **Rust** (rustup). Se instala en tu carpeta de usuario, no en todo el sistema:
+
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source "$HOME/.cargo/env"
+   ```
+
+**Dependencias adicionales:** ninguna. No hace falta Homebrew, OpenSSL, Docker ni Visual Studio. El cliente HTTPS usa `Security.framework` de macOS.
+
+**Compilar:**
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-```
-
-Compilar:
-
-```bash
+cd /Users/bronzeqq/Repos/pkg-merge
 cargo build --release --locked
 ./target/release/pkg-merge --version
 ```
@@ -497,7 +505,13 @@ rustup target add x86_64-apple-darwin
 cargo build --release --locked --target x86_64-apple-darwin
 ```
 
-O usa el artifact `pkg-merge-macos-x86_64` de CI.
+No hay binarios macOS en CI: esta es la única forma de tener uno.
+
+**Desinstalar Rust** (si algún día quieres limpiar):
+
+```bash
+rustup self uninstall
+```
 
 ### Opción 3: compilar en Linux (nativo)
 
@@ -548,7 +562,7 @@ Docker sirve para compilar y probar en Linux sin instalar Rust en el host.
 | `make clean-volumes` | Borra las cachés de Docker. |
 | `make clean` | Limpia los artefactos dentro de Docker. |
 
-**Importante:** Docker en macOS ejecuta Linux dentro de una máquina virtual. El binario que produce `make linux-binary` es **para Linux**, no para macOS. Para macOS usa `make macos-binary` o el artifact de CI.
+**Importante:** Docker en macOS ejecuta Linux dentro de una máquina virtual. El binario que produce `make linux-binary` es **para Linux**, no para macOS. Para macOS usa `make macos-binary` (compilación nativa).
 
 Equivalente manual a `make linux-binary`:
 
@@ -625,17 +639,16 @@ Ejecuta `make test` para todas.
 El workflow `.github/workflows/build.yml` compila:
 
 - Linux x86_64 y Linux ARM64.
-- macOS x86_64 (`macos-15-intel`).
-- macOS arm64 (`macos-15`).
 - Windows x64.
+- macOS: **no se compila en CI**; se compila a mano con la sección de macOS.
 
-Cada job sube un artifact. En cada push a `master`/`main`, PR o ejecución manual puedes descargarlos desde Actions. Al empujar un tag `v*`, el job `release` descarga los cinco y crea una Release con todos.
+Cada job sube un artifact. En cada push a `master`/`main`, PR o ejecución manual puedes descargarlos desde Actions. Al empujar un tag `v*`, el job `release` descarga los tres y crea una Release con todos.
 
 Para publicar una versión:
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
 #### Cómo funcionan los tags (importante)
@@ -653,7 +666,7 @@ Para comprobar que el tag apunta a tu último commit:
 git log -1 --oneline
 git tag --points-at HEAD
 git rev-parse HEAD
-git rev-parse v0.2.1
+git rev-parse v0.2.2
 ```
 
 Los dos últimos comandos deben devolver el **mismo hash**. En GitHub, la ejecución del tag muestra ese commit, y la Release muestra el tag.
