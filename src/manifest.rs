@@ -55,14 +55,15 @@ pub struct LoadedManifest {
     pub raw: String,
 }
 
-pub fn load(input: &str, log: &Log) -> Result<LoadedManifest> {
+pub fn load(input: &str, log: &Log, insecure_tls: bool) -> Result<LoadedManifest> {
+    let input = input.trim();
     if util::looks_like_url(input) {
         let url = util::crc_to_json_url(input);
         if url != input {
             log.info(format!("Convirtiendo .crc en .json: {url}"));
         }
         log.info(format!("Descargando manifiesto: {url}"));
-        let bytes = http::get_bytes(&url, MAX_MANIFEST_BYTES, EXIT_MANIFEST)?;
+        let bytes = http::get_bytes(&url, MAX_MANIFEST_BYTES, EXIT_MANIFEST, insecure_tls, log)?;
         let raw = String::from_utf8(bytes)
             .map_err(|e| Error::manifest(format!("el manifiesto no es UTF-8 válido: {e}")))?;
         let base_name = util::url_basename(&url)
@@ -103,7 +104,7 @@ pub fn load(input: &str, log: &Log) -> Result<LoadedManifest> {
         )));
     }
     if path.is_dir() {
-        return load(&path.to_string_lossy(), log);
+        return load(&path.to_string_lossy(), log, insecure_tls);
     }
 
     log.info(format!("Leyendo manifiesto: {}", path.display()));

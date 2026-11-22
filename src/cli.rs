@@ -106,6 +106,11 @@ pub struct Cli {
     #[arg(short, long)]
     pub verbose: bool,
 
+    /// No verifica el certificado TLS del CDN (CA privada de Sony: SCEI DNAS Root 05).
+    /// La integridad de cada pieza se sigue verificando con SHA-256.
+    #[arg(long)]
+    pub insecure_tls: bool,
+
     /// Relee el archivo final y verifica el SHA-256 de cada pieza en su offset.
     #[arg(long)]
     pub verify_final: bool,

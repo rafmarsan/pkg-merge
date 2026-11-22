@@ -123,6 +123,7 @@ pub struct MergeRequest<'a> {
     pub force: bool,
     pub strict_package_digest: bool,
     pub verify_final: bool,
+    pub insecure_tls: bool,
     pub stop_after: Option<usize>,
     pub no_progress: bool,
 }
@@ -641,13 +642,14 @@ pub fn run(request: &MergeRequest<'_>, log: &Log) -> Result<MergeSummary> {
                 )
             }
             PieceSource::Download => {
-                let mut download = match http::get(&located.piece.url, EXIT_PIECES) {
-                    Ok(download) => download,
-                    Err(error) => {
-                        bar.abandon();
-                        return Err(error);
-                    }
-                };
+                let mut download =
+                    match http::get(&located.piece.url, EXIT_PIECES, request.insecure_tls, log) {
+                        Ok(download) => download,
+                        Err(error) => {
+                            bar.abandon();
+                            return Err(error);
+                        }
+                    };
                 if let Some(len) = download.len {
                     if len != located.piece.file_size {
                         bar.abandon();

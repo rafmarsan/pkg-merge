@@ -72,6 +72,8 @@ pkg-merge.exe https://.../EP0082-PPSA08668_00-EUROPE0000000000.crc --parts-dir Z
 
 También acepta la URL terminada en `.json`, una ruta local al `.json`, o una carpeta.
 
+> El CDN de Sony usa una CA privada. Si el certificado falla, `pkg-merge` reintenta automáticamente sin verificarlo (como `curl -k`) y muestra un aviso. No necesitas ningún flag; las piezas se siguen verificando con SHA-256.
+
 ---
 
 ## Uso avanzado
@@ -130,6 +132,7 @@ Las piezas ausentes se descargan directamente al offset del archivo final, sin o
 | `--in-place` | Usa la pieza 0 como archivo final, sin duplicar el PKG completo. |
 | `--delete-parts` | Borra cada pieza después de escribirla, sincronizarla y verificar su SHA-256. Requiere `--in-place`. |
 | `--verify <post\|pre\|none>` | `post` (por defecto): copia y hashea en la misma pasada. `pre`: hashea antes de copiar (dos lecturas). `none`: sin hashes. |
+| `--insecure-tls` | No verifica el certificado TLS del CDN. Se usa automáticamente si el certificado de Sony falla; este flag lo fuerza desde el principio. |
 | `--verify-final` | Relee el archivo final y verifica el SHA-256 de cada pieza en su offset. Más lento, máxima confianza. |
 | `--strict-package-digest` | Compara el `packageDigest` de Sony con el SHA-256 del archivo unido y falla si difiere. Implica `--verify-final`. |
 | `--check` | Solo verifica manifiesto y piezas; no escribe nada. |
@@ -339,9 +342,15 @@ Esto es importante porque en un mismo manifiesto la pieza 0 puede llamarse `JP00
 
 El `.exe` no está firmado. Es normal. Puedes compilarlo tú mismo o revisar el workflow de GitHub Actions. Si SmartScreen lo bloquea, usa "Más información" → "Ejecutar de todas formas" solo si confías en el binario.
 
-### Error de certificado o de red al descargar el manifiesto
+### Error de certificado TLS al usar una URL de Sony
 
-La descarga usa el almacén de certificados de Windows (Schannel). Si estás detrás de un proxy corporativo que intercepta HTTPS con su propio certificado, puede rechazarlo. Prueba desde otra red, instala el certificado del proxy en Windows o descarga el `.json` con el navegador y pásalo como archivo local (el programa no necesita Internet si ya tienes el manifiesto y las piezas).
+No es un fallo tuyo ni de tu Windows: el CDN de Sony (`sgst.prod.dl.playstation.net`) usa un certificado firmado por la CA privada **SCEI DNAS Root 05**, que no está en el almacén de Windows/macOS/Linux. Ningún cliente normal la trusta.
+
+`pkg-merge` lo maneja automáticamente: intenta TLS normal y, si falla por el certificado, reintenta sin verificarlo (equivale a `curl -k`) y muestra un aviso. Las piezas se siguen verificando con SHA-256.
+
+- No necesitas hacer nada.
+- Si quieres forzarlo desde el principio: `--insecure-tls`.
+- Si además hay un proxy/antivirus que intercepta: usa `--insecure-tls` o descarga el `.json` y pásalo como archivo local.
 
 ### Dice que faltan piezas
 
@@ -407,8 +416,8 @@ Es normal si no has empujado un tag. GitHub Actions guarda los binarios como **A
 Las **Releases** solo se crean al empujar un tag `v*`:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 Los artifacts caducan a los 90 días; las Releases no. En las primeras ejecuciones solo se subió Windows porque el workflow aún no compilaba Linux/macOS; ya está corregido.
@@ -432,8 +441,8 @@ Cada tag `v*` genera una Release con los cinco binarios:
 Para crear una Release:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 #### Artifacts de GitHub Actions (para cada push/PR)
@@ -625,9 +634,31 @@ Cada job sube un artifact. En cada push a `master`/`main`, PR o ejecución manua
 Para publicar una versión:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
+
+#### Cómo funcionan los tags (importante)
+
+Un tag es una **foto de un commit**. No se mueve solo cuando haces commits nuevos. Por eso:
+
+1. Cada versión nueva necesita un **tag nuevo**: `v0.2.1`, `v0.2.2`, `v0.3.0`...
+2. No reutilices un tag antiguo para código nuevo.
+3. El CI compila exactamente el commit al que apunta el tag y adjunta los binarios a la Release de ese tag.
+4. Si el tag apunta a un commit viejo, los binarios serán viejos.
+
+Para comprobar que el tag apunta a tu último commit:
+
+```bash
+git log -1 --oneline
+git tag --points-at HEAD
+git rev-parse HEAD
+git rev-parse v0.2.1
+```
+
+Los dos últimos comandos deben devolver el **mismo hash**. En GitHub, la ejecución del tag muestra ese commit, y la Release muestra el tag.
+
+> El CI de una PR/push sirve para probar y deja artifacts temporales. El CI del tag sirve para publicar la Release. Son dos momentos distintos: no es redundante.
 
 > Los ejecutables no están firmados. Windows puede avisar de "editor desconocido". macOS puede pedir confirmación en "Privacidad y seguridad" la primera vez; si hace falta:
 
@@ -647,6 +678,8 @@ xattr -d com.apple.quarantine ./pkg-merge-macos-arm64
 4. Drag the folder onto `pkg-merge.exe`.
 
 It verifies the SHA-256 of every piece and the total size, and only creates the final `<name>.pkg` if everything matches. Optionally, `--verify-final` re-reads the merged file and verifies every block.
+
+> Sony's CDN uses a private CA (`SCEI DNAS Root 05`). If TLS verification fails, `pkg-merge` automatically retries without verifying the certificate (like `curl -k`) and prints a warning. No flag is required; pieces are still verified with SHA-256.
 
 > In split PS5 PKGs, Sony's `packageDigest` is **not** the SHA-256 of the concatenated file (main pieces use FIH containers and `_sc.pkg` goes last). Do not use `--strict-package-digest` unless you know your manifest is comparable; per-piece hashes and total size are the authoritative checks.
 

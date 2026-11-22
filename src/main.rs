@@ -59,12 +59,17 @@ fn run(cli: Cli) -> Result<()> {
     if cli.download_missing && cli.check {
         log.warn("--check no descarga piezas; las que falten se reportarán como error.");
     }
+    if cli.insecure_tls {
+        log.warn(
+            "--insecure-tls activado: no se verifica el certificado TLS del CDN. Las piezas sí se verifican con SHA-256.",
+        );
+    }
     if cli.jobs == 0 || cli.jobs > 64 {
         return Err(Error::usage("--jobs debe estar entre 1 y 64"));
     }
 
     let input = resolve_input(&cli)?;
-    let loaded = manifest::load(&input, &log)?;
+    let loaded = manifest::load(&input, &log, cli.insecure_tls)?;
 
     log.info(format!(
         "Origen del manifiesto: {}",
@@ -176,6 +181,7 @@ fn run(cli: Cli) -> Result<()> {
             force: cli.force,
             strict_package_digest: cli.strict_package_digest,
             verify_final: cli.verify_final || cli.strict_package_digest,
+            insecure_tls: cli.insecure_tls,
             stop_after: cli.stop_after,
             no_progress: cli.no_progress,
         },
